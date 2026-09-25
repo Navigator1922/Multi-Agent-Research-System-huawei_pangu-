@@ -1,102 +1,67 @@
-from __future__ import annotations
-
 import json
-import re
-from typing import Any, List, Optional
 
 try:
-    from config.structure import AgentState, ContextInput, add_message, record_event
-except ModuleNotFoundError:  # Supports package execution from the parent folder.
-    from ..config.structure import AgentState, ContextInput, add_message, record_event
-
+    from config.structure import ContextInput, AgentState
+except ModuleNotFoundError:
+    from ..config.structure import ContextInput, AgentState
 
 class Plan_Agent:
-    def __init__(self, model: Optional[Any] = None):
-        self.model = model
+    def __init__(self):
+        pass
 
-    def Planning(self, data: ContextInput) -> AgentState:
+    def Planning(self,data:ContextInput)->AgentState:
         if not isinstance(data, ContextInput):
-            raise TypeError("Plan_Agent.Planning 需要 ContextInput")
+            raise TypeError("Planning 需要 ContextInput")
         if not data.context.strip():
-            raise ValueError("调研主题不能为空")
+            raise ValueError("context 不能为空")
 
-        state = AgentState(
-            retry_count=data.max_retries + 1,
-            max_retries=data.max_retries,
-            input_data=data,
+        state = AgentState()
+        state.overall_steps += 1
+        state.log.append(
+            json.dumps(
+                {
+                    "type": "input",
+                    "context": data.context,
+                    "source_id": data.source_id,
+                    "url": data.url,
+                },
+                ensure_ascii=False,
+            )
         )
-        record_event(
-            state,
-            "agent_start",
-            agent="PlanAgent",
-            context=data.context,
-        )
+        state.log.append("PlanAgent: 已接收调研主题")
+        return self.Split(state)
 
-        requested_tasks = data.metadata.get("sub_tasks") or data.metadata.get("subtasks")
-        if requested_tasks:
-            state.sub_task = [str(item).strip() for item in requested_tasks if str(item).strip()]
-        return state
+    def Split(self,task:AgentState)->AgentState:
+        if not isinstance(task, AgentState):
+            raise TypeError("Split 需要 AgentState")
 
-    def Split(self, task: AgentState) -> AgentState:
-        """Ensure a research plan with at least three explicit sub-tasks."""
-
-        topic = task.input_data.context if task.input_data else "该调研主题"
-        if not task.sub_task and self.model is not None:
-            task.sub_task = self._model_split(topic)
-        if not task.sub_task:
-            task.sub_task = [
-                f"{topic}的基本概念、背景与发展过程",
-                f"{topic}的核心方法、主要应用与实际价值",
-                f"{topic}面临的问题、风险与未来发展趋势",
-            ]
-
-        defaults = [
-            f"{topic}的研究背景与基本定义",
-            f"{topic}的关键技术和应用场景",
-            f"{topic}的局限性、风险和发展趋势",
+        input_record = self._input_record(task)
+        topic = input_record["context"] if input_record else "当前主题"
+        default_tasks = [
+            f"研究{topic}的背景与基本概念",
+            f"分析{topic}的主要特点、应用与影响",
+            f"总结{topic}存在的问题、风险与发展方向",
         ]
-        for fallback in defaults:
-            if len(task.sub_task) >= 3:
+
+        selected = [item.strip() for item in task.sub_task if item.strip()]
+        for item in default_tasks:
+            if len(selected) >= 3:
                 break
-            task.sub_task.append(fallback)
-        task.sub_task = list(dict.fromkeys(task.sub_task))
-        task.overall_steps += 1
+            if item not in selected:
+                selected.append(item)
+        task.sub_task = selected
         task.current_agent = "RetrieveAgent"
-        task.status = "Running"
-        task.retry_count = task.max_retries + 1
-        record_event(task, "plan_created", sub_tasks=task.sub_task)
-        add_message(
-            task,
-            sender="PlanAgent",
-            receiver="RetrieveAgent",
-            message_type="task",
-            payload={"context": topic, "sub_tasks": task.sub_task},
-        )
+        task.retry_count = 2
+        task.log.append(f"PlanAgent: 已拆分 {len(task.sub_task)} 个子任务")
         return task
 
-    def _model_split(self, topic: str) -> List[str]:
-        prompt = (
-            "请把下面的调研主题拆分为至少三个相互独立的子任务。"
-            "只返回 JSON，格式为 {\"sub_tasks\":[\"...\"]}。\n主题："
-            f"{topic}"
-        )
-        response = self.model.generate(prompt)
-        if not isinstance(response, str):
-            return []
-
-        candidate = response.strip()
-        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", candidate, re.S)
-        if fenced:
-            candidate = fenced.group(1)
-        else:
-            match = re.search(r"\{.*\}", candidate, re.S)
-            if match:
-                candidate = match.group(0)
-        try:
-            payload = json.loads(candidate)
-        except json.JSONDecodeError:
-            return []
-        tasks = payload.get("sub_tasks") if isinstance(payload, dict) else payload
-        if not isinstance(tasks, list):
-            return []
-        return [str(item).strip() for item in tasks if str(item).strip()]
+    @staticmethod
+    def _input_record(task: AgentState):
+        for item in task.log:
+            try:
+                record = json.loads(item)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(record, dict) and record.get("type") == "input":
+                return record
+        return None

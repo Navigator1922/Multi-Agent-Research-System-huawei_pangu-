@@ -1,97 +1,83 @@
-from __future__ import annotations
-
-import re
-from typing import Any, Dict, List
+import json
+from typing import Dict
 
 try:
-    from config.structure import AgentState, add_message, record_event
-except ModuleNotFoundError:  # Supports package execution from the parent folder.
-    from ..config.structure import AgentState, add_message, record_event
-
+    from config.structure import AgentState
+except ModuleNotFoundError:
+    from ..config.structure import AgentState
 
 class Audit_agent:
     def __init__(self):
         pass
 
-    def baseline(self, data: AgentState) -> Dict[str, str]:
-        """Return a transparent one-pass baseline for comparison."""
-
-        completed = bool(data.report and data.evidence and data.sub_task)
+    def baseline(self,data:AgentState)->Dict[str,str]:
+        if not isinstance(data, AgentState):
+            raise TypeError("baseline 需要 AgentState")
+        report = self._latest_report(data)
+        coverage = self._coverage(data, report)
         return {
-            "mode": "single_agent_one_pass",
-            "task_completion_rate": (
-                f"{data.task_completion_rate:.4f}" if completed else "0.0000"
-            ),
-            "citation_coverage": f"{data.coverage_rate:.4f}" if completed else "0.0000",
-            "overall_steps": "1" if completed else "0",
+            "method": "单Agent一次性撰写",
+            "overall_steps": "1" if report else "0",
             "total_retries": "0",
+            "coverage_rate": f"{coverage:.4f}",
         }
 
-    def audit(self, data: AgentState) -> AgentState:
+    def audit(self,data:AgentState)->AgentState:
         if not isinstance(data, AgentState):
-            raise TypeError("Audit_agent.audit 需要 AgentState")
+            raise TypeError("audit 需要 AgentState")
 
         data.overall_steps += 1
-        record_event(data, "agent_start", agent="AuditAgent")
-        issues: List[str] = []
-        valid_source_ids = {
-            str(item.get("source_id"))
-            for item in data.evidence
-            if item.get("source_id")
-        }
-        cited_source_ids = set(re.findall(r"\[([^\]]+)\]", data.report or ""))
-        invalid_citations = sorted(cited_source_ids - valid_source_ids)
-        if not data.report.strip():
-            issues.append("报告内容为空")
+        report = self._latest_report(data)
+        issues = []
+        if not report:
+            issues.append("报告为空")
         if not data.evidence:
-            issues.append("没有保留检索证据")
-        if invalid_citations:
-            issues.append(f"存在无效引用: {', '.join(invalid_citations)}")
+            issues.append("没有保留证据")
 
-        missing_tasks: List[str] = []
-        completed_task_count = 0
-        for index, sub_task in enumerate(data.sub_task, 1):
-            task_id = f"subtask_{index:03d}"
-            task_evidence = [
-                item for item in data.evidence if str(item.get("task_id")) == task_id
-            ]
+        for sub_task in data.sub_task:
+            task_evidence = [item for item in data.evidence if sub_task in item]
             if not task_evidence:
-                missing_tasks.append(sub_task)
+                issues.append(f"子任务缺少证据：{sub_task}")
                 continue
-            completed_task_count += 1
-            if not any(
-                f"[{item.get('source_id')}]" in data.report
-                for item in task_evidence
-            ):
-                missing_tasks.append(sub_task)
-        if missing_tasks:
-            issues.append("缺少带有效引用的子任务: " + "；".join(missing_tasks))
+            source_ids = task_evidence[0][sub_task].keys()
+            if not any(f"[{source_id}]" in report for source_id in source_ids):
+                issues.append(f"子任务缺少有效引用：{sub_task}")
 
-        data.task_completion_rate = (
-            round(completed_task_count / len(data.sub_task), 4)
-            if data.sub_task
-            else 0.0
-        )
-        data.audit_result = {
-            "passed": not issues,
-            "issues": issues,
-            "task_completion_rate": data.task_completion_rate,
-            "citation_coverage": data.coverage_rate,
-            "valid_source_count": len(valid_source_ids),
-            "cited_source_count": len(cited_source_ids & valid_source_ids),
-            "invalid_citations": invalid_citations,
-        }
-        data.status = "Completed"
+        if issues:
+            data.status = "Error"
+            data.log.append("AuditAgent: 审核未通过；" + "；".join(issues))
+        else:
+            data.status = "Completed"
+            data.log.append("AuditAgent: 审核通过")
         data.current_agent = "AuditAgent"
-        data.retry_count = data.max_retries + 1
-        record_event(data, "audit_complete", **data.audit_result)
-        add_message(
-            data,
-            sender="AuditAgent",
-            receiver="System",
-            message_type="audit_result",
-            payload=data.audit_result,
-            evidence=data.evidence,
-            status="success" if data.audit_result["passed"] else "warning",
-        )
+        data.retry_count = 0
         return data
+
+    @staticmethod
+    def _latest_report(data: AgentState) -> str:
+        report = ""
+        for item in data.log:
+            try:
+                record = json.loads(item)
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(record, dict) and record.get("type") == "report":
+                report = str(record.get("content", ""))
+        return report
+
+    @staticmethod
+    def _coverage(data: AgentState, report: str) -> float:
+        if not data.sub_task or not report:
+            return 0.0
+        covered = 0
+        for sub_task in data.sub_task:
+            for item in data.evidence:
+                if sub_task not in item:
+                    continue
+                if any(
+                    f"[{source_id}]" in report
+                    for source_id in item[sub_task].keys()
+                ):
+                    covered += 1
+                break
+        return covered / len(data.sub_task)
