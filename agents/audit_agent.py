@@ -55,11 +55,14 @@ class Audit_agent:
 
     @staticmethod
     def _latest_report(data: AgentState) -> str:
+        """从日志中读取最后一份报告，供审核和基线计算使用。"""
+
         report = ""
         for item in data.log:
             try:
                 record = json.loads(item)
             except (TypeError, json.JSONDecodeError):
+                # 非 JSON 日志不是报告记录，继续向后查找。
                 continue
             if isinstance(record, dict) and record.get("type") == "report":
                 report = str(record.get("content", ""))
@@ -67,6 +70,12 @@ class Audit_agent:
 
     @staticmethod
     def _coverage(data: AgentState, report: str) -> float:
+        """计算报告覆盖的子任务比例。
+
+        一个子任务只有在报告中出现了该任务对应的来源编号时，
+        才被视为完成引用；返回值范围为 0 到 1。
+        """
+
         if not data.sub_task or not report:
             return 0.0
         covered = 0

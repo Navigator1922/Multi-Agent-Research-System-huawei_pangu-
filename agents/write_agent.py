@@ -72,10 +72,16 @@ class Write_Agent:
 
     @staticmethod
     def _input_record(data: AgentState):
+        """从状态日志中提取主题和来源信息，供报告生成使用。
+
+        返回原始输入字典；如果日志中没有合法的输入记录，则返回 ``None``。
+        """
+
         for item in data.log:
             try:
                 record = json.loads(item)
             except (TypeError, json.JSONDecodeError):
+                # 只跳过普通文本日志，不影响后续记录的查找。
                 continue
             if isinstance(record, dict) and record.get("type") == "input":
                 return record
@@ -83,11 +89,18 @@ class Write_Agent:
 
     @staticmethod
     def _latest_report(data: AgentState) -> str:
+        """从状态日志中提取最后生成的报告正文。
+
+        撰写结果保存在日志中的 ``type=report`` JSON 记录里，
+        因此审核或计算覆盖率时都通过这个函数读取。
+        """
+
         report = ""
         for item in data.log:
             try:
                 record = json.loads(item)
             except (TypeError, json.JSONDecodeError):
+                # 普通文本日志不包含报告内容。
                 continue
             if isinstance(record, dict) and record.get("type") == "report":
                 report = str(record.get("content", ""))

@@ -51,10 +51,17 @@ class Retrieve_Agent:
 
     @staticmethod
     def _input_record(data: AgentState):
+        """从 AgentState.log 中读取规划阶段保存的原始输入。
+
+        检索 Agent 需要从这条记录中获取主题内容和来源编号，
+        以便按照原始 evidence 格式生成检索证据。
+        """
+
         for item in data.log:
             try:
                 record = json.loads(item)
             except (TypeError, json.JSONDecodeError):
+                # 非 JSON 日志只是过程说明，不是输入记录。
                 continue
             if isinstance(record, dict) and record.get("type") == "input":
                 return record

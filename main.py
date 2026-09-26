@@ -74,13 +74,18 @@ def run_pipeline(data) -> SystemOutput:
 
 
 def _latest_report(state: AgentState) -> str:
-    """读取保存在原始字符串日志字段中的报告。"""
+    """从 AgentState.log 中找到最后一条报告并返回报告正文。
+
+    报告以 JSON 字符串保存在原有的日志字段中，因此这里需要逐条解析，
+    并使用最后一次出现的报告内容作为最终结果。
+    """
 
     report = ""
     for item in state.log:
         try:
             record = json.loads(item)
         except (TypeError, json.JSONDecodeError):
+            # 普通文本日志不是报告记录，直接跳过。
             continue
         if isinstance(record, dict) and record.get("type") == "report":
             report = str(record.get("content", ""))

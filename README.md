@@ -48,6 +48,27 @@ data = ContextInput(
 )
 ```
 
+也可以把同样的数据保存为本地 JSON 文件，再把文件路径传给 `run_pipeline`：
+
+```json
+{
+    "context": "人工智能在教育中的应用",
+    "source_id": "source_001",
+    "url": "https://example.com/source"
+}
+```
+
+调用方式：
+
+```python
+from main import run_pipeline
+
+result = run_pipeline("data/input.json")
+print(result.final_report)
+```
+
+JSON 文件的顶层必须是对象，并且必须包含 `context`、`source_id`、`url` 三个字符串字段。
+
 ## 运行示例
 
 在 `openpangu_qa` 目录下执行：
