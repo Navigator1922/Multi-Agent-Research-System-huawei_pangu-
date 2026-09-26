@@ -14,8 +14,13 @@ openpangu_qa/
 │   ├── retrieve_agent.py           # 检索 Agent
 │   ├── write_agent.py              # 撰写 Agent
 │   └── audit_agent.py              # 审核 Agent
-└── utils/
+├── utils/
     └── data_loader.py              # 输入数据加载
+└── data/                            # Wikipedia 真实数据与实验输入
+    ├── wikipedia_sources/           # 每个页面一个 JSON 来源
+    ├── wikipedia_manifest.json      # 来源与版本信息
+    ├── normal_input.json            # 正常运行输入
+    └── retrieval_failure.json       # 检索失败输入
 ```
 
 ## 运行环境
@@ -69,12 +74,26 @@ print(result.final_report)
 
 JSON 文件的顶层必须是对象，并且必须包含 `context`、`source_id`、`url` 三个字符串字段。
 
+当前实验采用单来源方案，因此每个 Wikipedia 页面单独保存为一个 JSON 文件。`normal_input.json` 选用“生成式人工智能”页面，其他页面保存在 `data/wikipedia_sources/` 中备用。
+
 ## 运行示例
 
 在 `openpangu_qa` 目录下执行：
 
 ```bash
 python -c "from main import run_pipeline; r = run_pipeline({'context': '人工智能在教育中的应用', 'source_id': 'source_001', 'url': 'https://example.com/source'}); print(r.final_report); print(r.coverage_rate)"
+```
+
+使用本次构建的真实 Wikipedia 数据：
+
+```bash
+python -c "from main import run_pipeline; r = run_pipeline('data/normal_input.json'); print(r.final_report); print('覆盖率:', r.coverage_rate)"
+```
+
+运行检索失败测试：
+
+```bash
+python -c "from main import run_pipeline; r = run_pipeline('data/retrieval_failure.json'); print(r.final_report); print('重试次数:', r.total_retries)"
 ```
 
 从项目父目录以包方式运行：
