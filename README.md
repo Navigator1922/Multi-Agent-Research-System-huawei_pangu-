@@ -21,8 +21,8 @@ openpangu_qa/
 ## 运行环境
 
 - Python 3.10 或更高版本
-- 只使用 Python 标准库
-- 当前本地版本不要求安装第三方 Python 包
+- 本地无模型模式只使用 Python 标准库
+- 云端模型模式需要已安装 `torch`、`torch-npu` 和 `transformers`
 
 ## 数据结构
 
@@ -125,4 +125,23 @@ Agent 之间通过 `AgentState` 传递状态。证据保持原始骨架定义的
 
 ## openPangu 云端说明
 
-当前版本首先保证本地标准库流程可运行。原始骨架没有模型字段或模型构造接口，因此没有擅自增加盘古模型适配器。云端接入 openPangu 时，应在不破坏现有数据结构的前提下，为 Agent 明确增加模型调用接口，再替换规划、撰写等需要生成能力的内部逻辑。
+本项目通过 `utils/model_adapter.py` 可选接入 openPangu，不改变原始数据类、证据格式和 `run_pipeline(data)` 接口。
+
+本地运行时不设置 `PANGU_MODEL_PATH`，规划和撰写 Agent 使用确定性逻辑；云端运行时设置模型目录，规划 Agent 和撰写 Agent 会共享同一个盘古模型实例。
+
+Linux 云端示例：
+
+```bash
+export PANGU_MODEL_PATH=/opt/pangu/openPangu-Embedded-1B-V1.1
+export PANGU_DEVICE=auto
+export PANGU_MAX_NEW_TOKENS=512
+python -c "from main import run_pipeline; r = run_pipeline('data/input.json'); print(r.final_report); print(r.coverage_rate)"
+```
+
+也可以使用云端已有的 7B 模型目录：
+
+```bash
+export PANGU_MODEL_PATH=/opt/pangu/openPangu-Embedded-7B-V1.1
+```
+
+适配器使用 `AutoTokenizer.from_pretrained` 和 `AutoModelForCausalLM.from_pretrained` 加载本地模型目录，并自动优先选择可用的 Ascend NPU、CUDA 或 CPU。模型目录必须已经存在于云端，代码仓库只保存适配逻辑，不保存模型权重。

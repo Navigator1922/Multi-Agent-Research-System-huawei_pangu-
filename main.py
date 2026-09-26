@@ -7,6 +7,7 @@ try:
     from agents.retrieve_agent import Retrieve_Agent
     from agents.write_agent import Write_Agent
     from agents.audit_agent import Audit_agent
+    from utils.model_adapter import load_model_from_environment
 except ModuleNotFoundError:
     from .utils.data_loader import loader
     from .config.structure import ContextInput, SystemOutput, AgentState
@@ -14,12 +15,14 @@ except ModuleNotFoundError:
     from .agents.retrieve_agent import Retrieve_Agent
     from .agents.write_agent import Write_Agent
     from .agents.audit_agent import Audit_agent
+    from .utils.model_adapter import load_model_from_environment
 
 def run_pipeline(data) -> SystemOutput:
     initial_input: ContextInput = loader(data)
-    planner = Plan_Agent()
+    model = load_model_from_environment()
+    planner = Plan_Agent(model=model)
     retriever = Retrieve_Agent()
-    writer = Write_Agent()
+    writer = Write_Agent(model=model)
     auditor = Audit_agent()
 
     state: AgentState = planner.Planning(initial_input)

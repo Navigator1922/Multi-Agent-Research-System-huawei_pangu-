@@ -1,4 +1,6 @@
 import json
+import re
+from typing import Any, List, Optional
 
 try:
     from config.structure import ContextInput, AgentState
@@ -6,8 +8,10 @@ except ModuleNotFoundError:
     from ..config.structure import ContextInput, AgentState
 
 class Plan_Agent:
-    def __init__(self):
-        pass
+    def __init__(self, model: Optional[Any] = None):
+        """创建规划 Agent；未传模型时使用本地确定性规划。"""
+
+        self.model = model
 
     def Planning(self,data:ContextInput)->AgentState:
         if not isinstance(data, ContextInput):
@@ -37,13 +41,18 @@ class Plan_Agent:
 
         input_record = self._input_record(task)
         topic = input_record["context"] if input_record else "当前主题"
+        selected = [item.strip() for item in task.sub_task if item.strip()]
+        if not selected and self.model is not None:
+            selected = self._model_split(topic)
+            if selected:
+                task.log.append("PlanAgent: 已使用盘古模型生成子任务")
+
         default_tasks = [
             f"研究{topic}的背景与基本概念",
             f"分析{topic}的主要特点、应用与影响",
             f"总结{topic}存在的问题、风险与发展方向",
         ]
 
-        selected = [item.strip() for item in task.sub_task if item.strip()]
         for item in default_tasks:
             if len(selected) >= 3:
                 break
@@ -54,6 +63,41 @@ class Plan_Agent:
         task.retry_count = 2
         task.log.append(f"PlanAgent: 已拆分 {len(task.sub_task)} 个子任务")
         return task
+
+    def _model_split(self, topic: str) -> List[str]:
+        """调用模型拆分主题，并从模型文本中提取子任务列表。"""
+
+        prompt = (
+            "请把下面的调研主题拆分为至少三个相互独立的子任务。"
+            "只返回 JSON，格式为 {\"sub_tasks\":[\"任务1\",\"任务2\"]}。\n"
+            f"调研主题：{topic}"
+        )
+        try:
+            response = self.model.generate(prompt)
+        except Exception:
+            return []
+        if not isinstance(response, str):
+            return []
+
+        candidate = response.strip()
+        fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", candidate, re.S)
+        if fenced:
+            candidate = fenced.group(1)
+        else:
+            object_match = re.search(r"\{.*\}", candidate, re.S)
+            list_match = re.search(r"\[.*\]", candidate, re.S)
+            candidate = (object_match or list_match).group(0) if (object_match or list_match) else candidate
+
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            return []
+
+        if isinstance(payload, dict):
+            payload = payload.get("sub_tasks", payload.get("tasks", []))
+        if not isinstance(payload, list):
+            return []
+        return [str(item).strip() for item in payload if str(item).strip()]
 
     @staticmethod
     def _input_record(task: AgentState):
