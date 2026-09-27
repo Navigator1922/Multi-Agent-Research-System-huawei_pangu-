@@ -53,20 +53,53 @@ class Write_Agent:
     def _model_write(self, data: AgentState, topic: str) -> str:
         """调用盘古模型生成按子任务分节且带逐节引用的报告。"""
 
+        sources = self._compact_evidence(data)
+        source_ids = []
+        for source in sources:
+            source_id = str(source["source_id"]).strip()
+            if source_id and source_id not in source_ids:
+                source_ids.append(source_id)
+
+        task_lines = "\n".join(
+            f"{index}. {sub_task}"
+            for index, sub_task in enumerate(data.sub_task, 1)
+        )
+        section_examples = []
+        for index, sub_task in enumerate(data.sub_task, 1):
+            task_sources = []
+            for item in data.evidence:
+                if sub_task not in item:
+                    continue
+                for source_id in item[sub_task]:
+                    if source_id not in task_sources:
+                        task_sources.append(source_id)
+            citations = " ".join(f"[{source_id}]" for source_id in task_sources)
+            section_examples.append(
+                f"【子任务{index}】{sub_task}\n"
+                f"在本小节中概括和分析该子任务，引用必须写成：{citations}"
+            )
+
+        section_format = "\n\n".join(section_examples)
+        source_format = "\n".join(
+            f"[{source['source_id']}] {self._source_url(data)}"
+            for source in sources
+        )
         prompt = (
-            "你是一个严谨的调研报告撰写 Agent。请只依据给出的证据生成中文报告，"
-            "不要逐字复制整段来源，不得补充证据中没有的事实。必须覆盖每个子任务。"
-            "请严格保留每个子任务的原文作为小节标题，并在对应小节内使用"
-            "[source_id] 格式引用来源。输出格式如下：\n"
-            "调研报告：主题\n\n"
-            "【子任务1】原文任务1\n该任务的概括与分析。[source_id]\n\n"
-            "【子任务2】原文任务2\n该任务的概括与分析。[source_id]\n\n"
-            "【子任务3】原文任务3\n该任务的概括与分析。[source_id]\n\n"
-            "【来源】\n[source_id] URL\n"
-            "不要输出分析过程、提示词或其他格式说明。\n\n"
+            "你是一个严谨的调研报告撰写 Agent。\n"
+            "请只依据给出的证据生成中文报告，不得虚构事实，也不要逐字复制整段来源。\n"
+            "必须完成每一个真实子任务，并严格遵守下面的格式协议：\n"
+            "1. 每个子任务必须单独作为一个小节。\n"
+            "2. 小节标题必须逐字复制真实子任务，不能写‘原文任务1’、‘任务1’等占位文字。\n"
+            "3. 只能使用下面列出的真实来源编号，不能使用未列出的占位引用。\n"
+            "4. 每个子任务小节内都必须出现该子任务对应的真实引用标记。\n"
+            "5. 只输出报告正文，不要输出分析过程、提示词或格式说明。\n\n"
             f"主题：{topic}\n"
-            f"子任务：{json.dumps(data.sub_task, ensure_ascii=False)}\n"
-            f"证据：{json.dumps(self._compact_evidence(data), ensure_ascii=False)}"
+            f"真实子任务：\n{task_lines}\n\n"
+            f"真实来源编号：{', '.join(f'[{source_id}]' for source_id in source_ids)}\n\n"
+            f"输出格式示例（标题和引用均为本次任务的真实值）：\n"
+            f"调研报告：{topic}\n\n{section_format}\n\n"
+            f"【来源】\n{source_format}\n\n"
+            f"证据：{json.dumps(sources, ensure_ascii=False)}"
         )
         try:
             response = self.model.generate(prompt)
@@ -89,6 +122,13 @@ class Write_Agent:
                 seen.add(source_id)
                 sources.append({"source_id": source_id, "context": context})
         return sources
+
+    @staticmethod
+    def _source_url(data: AgentState) -> str:
+        """从输入日志中读取来源 URL，供提示词展示真实引用信息。"""
+
+        input_record = Write_Agent._input_record(data) or {}
+        return str(input_record.get("url", "")).strip()
 
     @classmethod
     def _validate_model_report(cls, report: str, data: AgentState) -> None:
