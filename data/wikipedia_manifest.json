@@ -4,7 +4,6 @@
   "collection_method": "中文 Wikipedia MediaWiki API，使用 variant=zh-cn 和 explaintext=1。",
   "retrieved_at": "2026-09-27T07:21:12+00:00",
   "normal_input": "normal_input.json",
-  "retrieval_failure_input": "retrieval_failure.json",
   "sources": [
     {
       "source_id": "wiki_generative_ai",

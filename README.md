@@ -20,13 +20,9 @@ openpangu_qa/
 ├── data/                            # Wikipedia 真实数据与实验输入
 │   ├── wikipedia_sources/           # 每个页面一个完整 JSON 快照
 │   ├── wikipedia_manifest.json      # 来源、revision 和校验和
-│   ├── normal_input.json            # 正常运行输入
-│   └── retrieval_failure.json       # 真实来源解析失败输入
+│   └── normal_input.json            # 正常运行输入
 ├── scripts/
 │   └── collect_wikipedia.py        # 按固定 revision 重建完整 Wikipedia 快照
-└── tests/
-    ├── test_data_pipeline.py       # 数据完整性和流程测试
-    └── test_model_write.py          # 子任务拆分、引用和重试测试
 ```
 
 ## 运行环境
@@ -87,7 +83,7 @@ print(result.final_report)
 
 JSON 文件的顶层必须是对象，并且必须包含 `context`、`source_id`、`url` 三个字符串字段；`source_ids` 为可选字符串数组。
 
-当前实验保存 5 个完整的 Wikipedia revision 快照。`normal_input.json` 只保存研究主题、主来源和 5 个来源 ID；运行时会从来源目录加载全部正文。`retrieval_failure.json` 使用不存在的来源 ID，专门测试真实的来源解析失败。
+当前实验保存 5 个完整的 Wikipedia revision 快照。`normal_input.json` 只保存研究主题、主来源和 5 个来源 ID；运行时会从来源目录加载全部正文。
 
 刷新数据时执行：
 
@@ -111,18 +107,6 @@ python -c "from main import run_pipeline; r = run_pipeline({'context': '生成�
 
 ```bash
 python -c "from main import run_pipeline; r = run_pipeline('data/normal_input.json'); print(r.final_report); print('覆盖率:', r.coverage_rate)"
-```
-
-运行检索失败测试：
-
-```bash
-python -c "from main import run_pipeline; r = run_pipeline('data/retrieval_failure.json'); print(r.final_report); print('重试次数:', r.total_retries)"
-```
-
-运行数据测试：
-
-```bash
-python -m unittest discover -s tests -v
 ```
 
 从项目父目录以包方式运行：
