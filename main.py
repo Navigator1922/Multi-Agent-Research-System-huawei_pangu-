@@ -23,7 +23,8 @@ def run_pipeline(data) -> SystemOutput:
     planner = Plan_Agent(model=model)
     retriever = Retrieve_Agent()
     writer = Write_Agent(model=model)
-    auditor = Audit_agent()
+    # baseline 与多 Agent 流程共用模型实例，但会单独发起一次单 Agent 调用。
+    auditor = Audit_agent(model=model)
 
     state: AgentState = planner.Planning(initial_input)
     coverage_rate = 0.0

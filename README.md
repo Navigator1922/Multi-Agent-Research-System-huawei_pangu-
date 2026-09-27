@@ -138,15 +138,24 @@ Agent 之间通过 `AgentState` 传递状态。证据保持原始骨架定义的
 - `overall_steps`：完成的 Agent 步骤数
 - `total_retries`：累计重试次数
 - `coverage_rate`：子任务引用覆盖率
-- `baseline_comparison`：与单 Agent 一次性撰写方式的对比结果
+- `baseline_comparison`：独立执行一次单 Agent 撰写后的对比结果；其中
+  `executed` 表示是否真正执行，`status` 表示该次 baseline 是否成功，
+  `model_used` 表示是否调用了盘古模型。
 
 单次 Agent 执行失败时，系统最多重试两次。检索阶段如果 `source_id` 为空，会被视为检索失败并进入重试流程。
+启用盘古模型后，规划结果必须由模型返回至少三个有效子任务；解析失败不会静默替换为固定子任务，
+而是记录原始返回并进入重试。撰写结果也必须逐个包含子任务小节及其对应来源引用，
+否则会进入撰写阶段重试。
+
+`baseline_comparison` 不是从多 Agent 报告推导出来的伪基线。主流程结束后，
+`Audit_agent.baseline` 会使用相同输入独立执行一次单 Agent 撰写，并单独统计步骤数、重试次数和引用覆盖率。
 
 ## openPangu 云端说明
 
 本项目通过 `utils/model_adapter.py` 可选接入 openPangu，不改变原始数据类、证据格式和 `run_pipeline(data)` 接口。
 
-本地运行时不设置 `PANGU_MODEL_PATH`，规划和撰写 Agent 使用确定性逻辑；云端运行时设置模型目录，规划 Agent 和撰写 Agent 会共享同一个盘古模型实例。
+本地运行时不设置 `PANGU_MODEL_PATH`，规划和撰写 Agent 使用确定性逻辑，baseline 也会独立执行一次本地单 Agent 撰写；
+云端运行时设置模型目录，规划 Agent、撰写 Agent 和 baseline 会共享同一个盘古模型实例，但每个阶段仍然独立调用模型。
 
 Linux 云端示例：
 
