@@ -27,12 +27,16 @@ class Plan_Agent:
             raise ValueError("context 不能为空")
 
         state = AgentState()
+        source_ids = list(data.source_ids)
+        if not source_ids and data.source_id.strip():
+            source_ids = [data.source_id.strip()]
         state.log.append(
             json.dumps(
                 {
                     "type": "input",
                     "context": data.context,
                     "source_id": data.source_id,
+                    "source_ids": source_ids,
                     "url": data.url,
                 },
                 ensure_ascii=False,
@@ -57,6 +61,7 @@ class Plan_Agent:
                     )
                 )
                 state.log.append(f"工位 PlanAgent 执行异常: {exc}")
+                state.last_error = f"PlanAgent: {exc}"
                 if state.retry_count > 0:
                     state.retry_count -= 1
                     state.total_retries += 1
@@ -81,7 +86,7 @@ class Plan_Agent:
         selected = [item.strip() for item in task.sub_task if item.strip()]
 
         if self.model is not None:
-            selected = self._model_split(topic)
+            selected = self._model_split(topic, repair_feedback=task.last_error)
             if len(selected) < 3:
                 raise ValueError("盘古模型没有生成至少三个有效子任务")
             task.log.append("PlanAgent: 已使用盘古模型生成子任务")
@@ -104,6 +109,7 @@ class Plan_Agent:
         task.sub_task = selected
         task.current_agent = "RetrieveAgent"
         task.retry_count = 2
+        task.last_error = ""
         task.log.append(f"PlanAgent: 已拆分 {len(task.sub_task)} 个子任务")
         task.log.append(
             json.dumps(
@@ -113,15 +119,21 @@ class Plan_Agent:
         )
         return task
 
-    def _model_split(self, topic: str) -> List[str]:
+    def _model_split(self, topic: str, repair_feedback: str = "") -> List[str]:
         """调用盘古模型并严格解析 JSON 子任务结果。"""
 
         self._last_model_response = ""
+        repair_text = (
+            f"上一次规划失败，必须修复以下问题：{repair_feedback[:1200]}\n"
+            if repair_feedback
+            else ""
+        )
         prompt = (
             "你是调研系统的规划 Agent。请把下面的主题拆分为至少三个相互独立、"
             "不能互相重复的子任务。每个子任务必须是可以由资料证据回答的具体问题。"
             "只返回 JSON，不要返回解释、Markdown 或代码围栏。格式必须是："
             '{"sub_tasks":["任务1","任务2","任务3"]}\n'
+            f"{repair_text}"
             f"调研主题：{topic}"
         )
         try:
@@ -185,13 +197,15 @@ class Plan_Agent:
 
     @staticmethod
     def _topic(input_record: dict) -> str:
-        """从输入 URL 提取页面主题，避免把整篇资料拼进任务名称。"""
+        """从输入主题生成任务名称，不再把来源正文当作主题。"""
+
+        context = str(input_record.get("context", "")).strip()
+        if context:
+            first_sentence = re.split(r"[。！？\n]", context, maxsplit=1)[0].strip()
+            return first_sentence[:120] or "当前主题"
 
         url = str(input_record.get("url", "")).strip()
         path_name = unquote(urlparse(url).path.rstrip("/").split("/")[-1])
         if path_name:
             return path_name.replace("_", " ")
-
-        context = str(input_record.get("context", "")).strip()
-        first_sentence = re.split(r"[。！？\n]", context, maxsplit=1)[0].strip()
-        return first_sentence[:80] or "当前主题"
+        return "当前主题"

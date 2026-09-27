@@ -47,6 +47,7 @@ def run_pipeline(data) -> SystemOutput:
 
         except Exception as e:
             current_agent = state.current_agent
+            state.last_error = f"{current_agent}: {str(e)}"
             state.log.append(f"工位 {current_agent} 执行异常: {str(e)}")
             if state.retry_count > 0:
                 state.retry_count -= 1

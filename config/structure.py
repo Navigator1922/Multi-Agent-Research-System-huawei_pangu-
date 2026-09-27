@@ -6,6 +6,7 @@ class ContextInput:
     context: str
     source_id: str
     url: str
+    source_ids: List[str] = field(default_factory=list)
 
 @dataclass
 class AgentState:
@@ -17,6 +18,9 @@ class AgentState:
     log: List[str] = field(default_factory=list)
     sub_task: List[str] = field(default_factory=list)
     evidence: List[dict] = field(default_factory=list)      # 格式：List[Dict{sub_task:{source_id:context}}]
+    source_metadata: Dict[str, dict] = field(default_factory=dict)
+    last_error: str = ""
+    draft_sections: Dict[str, str] = field(default_factory=dict)
 
 @dataclass
 class SystemOutput:

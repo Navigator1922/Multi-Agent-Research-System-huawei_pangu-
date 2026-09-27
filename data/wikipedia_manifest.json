@@ -2,8 +2,7 @@
   "dataset_name": "wikipedia_generative_ai_research",
   "topic": "生成式人工智能的技术基础、应用与风险",
   "collection_method": "中文 Wikipedia MediaWiki API，使用 variant=zh-cn 和 explaintext=1。",
-  "retrieved_at": "2026-09-26T12:13:40+00:00",
-  "context_limit_characters": 3000,
+  "retrieved_at": "2026-09-27T07:21:12+00:00",
   "normal_input": "normal_input.json",
   "retrieval_failure_input": "retrieval_failure.json",
   "sources": [
@@ -16,12 +15,13 @@
       "revision_id": 94419119,
       "revision_timestamp": "2026-09-18T04:38:41Z",
       "url": "https://zh.wikipedia.org/wiki/%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E6%85%A7",
-      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&inprop=url&rvprop=ids%7Ctimestamp&rvlimit=1&redirects=1&titles=%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&variant=zh-cn&format=json&formatversion=2",
-      "retrieved_at": "2026-09-26T12:13:40+00:00",
-      "original_characters": 7201,
-      "stored_characters": 3000,
-      "truncated": true,
-      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。"
+      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&variant=zh-cn&inprop=url&rvprop=ids%7Ctimestamp&revids=94419119&format=json&formatversion=2",
+      "retrieved_at": "2026-09-27T07:21:12+00:00",
+      "original_characters": 7225,
+      "stored_characters": 7225,
+      "truncated": false,
+      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。",
+      "content_sha256": "45886fd80e65918d889593e7660e67831320b202c20a841712487c9409f152da"
     },
     {
       "source_id": "wiki_large_language_model",
@@ -32,12 +32,13 @@
       "revision_id": 94347548,
       "revision_timestamp": "2026-09-14T01:28:28Z",
       "url": "https://zh.wikipedia.org/wiki/%E5%A4%A7%E5%9E%8B%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B",
-      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&inprop=url&rvprop=ids%7Ctimestamp&rvlimit=1&redirects=1&titles=%E5%A4%A7%E5%9E%8B%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B&variant=zh-cn&format=json&formatversion=2",
-      "retrieved_at": "2026-09-26T12:13:40+00:00",
-      "original_characters": 9655,
-      "stored_characters": 3000,
-      "truncated": true,
-      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。"
+      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&variant=zh-cn&inprop=url&rvprop=ids%7Ctimestamp&revids=94347548&format=json&formatversion=2",
+      "retrieved_at": "2026-09-27T07:21:12+00:00",
+      "original_characters": 9691,
+      "stored_characters": 9691,
+      "truncated": false,
+      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。",
+      "content_sha256": "386058c2a34e1d9877be1540ad5acdc51aa733e3ceef1032e3f92f3ba0e26bf4"
     },
     {
       "source_id": "wiki_transformer_architecture",
@@ -48,12 +49,13 @@
       "revision_id": 93692639,
       "revision_timestamp": "2026-07-29T13:30:58Z",
       "url": "https://zh.wikipedia.org/wiki/Transformer%E6%9E%B6%E6%9E%84",
-      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&inprop=url&rvprop=ids%7Ctimestamp&rvlimit=1&redirects=1&titles=Transformer%E6%9E%B6%E6%9E%84&variant=zh-cn&format=json&formatversion=2",
-      "retrieved_at": "2026-09-26T12:13:40+00:00",
-      "original_characters": 10886,
-      "stored_characters": 3000,
-      "truncated": true,
-      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。"
+      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&variant=zh-cn&inprop=url&rvprop=ids%7Ctimestamp&revids=93692639&format=json&formatversion=2",
+      "retrieved_at": "2026-09-27T07:21:12+00:00",
+      "original_characters": 10905,
+      "stored_characters": 10905,
+      "truncated": false,
+      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。",
+      "content_sha256": "b891acb1fb5b87bd3bfa41550cdd3c06f65654eab2c007c30a4baf5e1219e8cb"
     },
     {
       "source_id": "wiki_ai_ethics",
@@ -64,12 +66,13 @@
       "revision_id": 94484621,
       "revision_timestamp": "2026-09-21T18:13:53Z",
       "url": "https://zh.wikipedia.org/wiki/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E4%BC%A6%E7%90%86%E5%AD%A6",
-      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&inprop=url&rvprop=ids%7Ctimestamp&rvlimit=1&redirects=1&titles=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E4%BC%A6%E7%90%86%E5%AD%A6&variant=zh-cn&format=json&formatversion=2",
-      "retrieved_at": "2026-09-26T12:13:40+00:00",
-      "original_characters": 17765,
-      "stored_characters": 3000,
-      "truncated": true,
-      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。"
+      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&variant=zh-cn&inprop=url&rvprop=ids%7Ctimestamp&revids=94484621&format=json&formatversion=2",
+      "retrieved_at": "2026-09-27T07:21:12+00:00",
+      "original_characters": 17800,
+      "stored_characters": 17800,
+      "truncated": false,
+      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。",
+      "content_sha256": "3c05b274af8efc2d0b264ae66673f2973749c2187a7cd091a816d5e6748208e8"
     },
     {
       "source_id": "wiki_ai_regulation",
@@ -80,12 +83,16 @@
       "revision_id": 93959324,
       "revision_timestamp": "2026-08-20T03:04:30Z",
       "url": "https://zh.wikipedia.org/wiki/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E7%9B%91%E7%AE%A1",
-      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&inprop=url&rvprop=ids%7Ctimestamp&rvlimit=1&redirects=1&titles=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E7%9B%91%E7%AE%A1&variant=zh-cn&format=json&formatversion=2",
-      "retrieved_at": "2026-09-26T12:13:40+00:00",
-      "original_characters": 15255,
-      "stored_characters": 3000,
-      "truncated": true,
-      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。"
+      "api_url": "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts%7Cinfo%7Crevisions&explaintext=1&exsectionformat=plain&variant=zh-cn&inprop=url&rvprop=ids%7Ctimestamp&revids=93959324&format=json&formatversion=2",
+      "retrieved_at": "2026-09-27T07:21:12+00:00",
+      "original_characters": 15283,
+      "stored_characters": 15283,
+      "truncated": false,
+      "license": "Wikipedia 内容依据 CC BY-SA 4.0 和 GFDL 发布，使用时请保留来源和许可说明。",
+      "content_sha256": "e3a6578e085640a0d3e08f253d3d5c8090381c6b7a144cdfb0673d2fd248491a"
     }
-  ]
+  ],
+  "schema_version": 2,
+  "content_field": "context",
+  "content_policy": "complete revision-pinned plaintext extract; no truncation"
 }

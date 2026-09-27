@@ -15,12 +15,18 @@ openpangu_qa/
 │   ├── write_agent.py              # 撰写 Agent
 │   └── audit_agent.py              # 审核 Agent
 ├── utils/
-    └── data_loader.py              # 输入数据加载
-└── data/                            # Wikipedia 真实数据与实验输入
-    ├── wikipedia_sources/           # 每个页面一个 JSON 来源
-    ├── wikipedia_manifest.json      # 来源与版本信息
-    ├── normal_input.json            # 正常运行输入
-    └── retrieval_failure.json       # 检索失败输入
+│   ├── data_loader.py              # 输入数据加载
+│   └── source_store.py             # 来源快照和完整性校验
+├── data/                            # Wikipedia 真实数据与实验输入
+│   ├── wikipedia_sources/           # 每个页面一个完整 JSON 快照
+│   ├── wikipedia_manifest.json      # 来源、revision 和校验和
+│   ├── normal_input.json            # 正常运行输入
+│   └── retrieval_failure.json       # 真实来源解析失败输入
+├── scripts/
+│   └── collect_wikipedia.py        # 按固定 revision 重建完整 Wikipedia 快照
+└── tests/
+    ├── test_data_pipeline.py       # 数据完整性和流程测试
+    └── test_model_write.py          # 子任务拆分、引用和重试测试
 ```
 
 ## 运行环境
@@ -31,15 +37,20 @@ openpangu_qa/
 
 ## 数据结构
 
-输入必须包含以下三个字符串字段：
+输入必须包含以下三个字符串字段，并可以用 `source_ids` 选择多个本地来源：
 
 ```python
 {
-    "context": "人工智能在教育中的应用",
-    "source_id": "source_001",
-    "url": "https://example.com/source"
+    "context": "生成式人工智能的技术基础、应用与风险",
+    "source_id": "wiki_generative_ai",
+    "source_ids": ["wiki_generative_ai"],
+    "url": "https://zh.wikipedia.org/wiki/%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E6%85%A7"
 }
 ```
+
+`context` 是研究主题，不是来源正文。来源正文只保存在 `data/wikipedia_sources/`
+中，由 `RetrieveAgent` 根据 `source_ids` 加载并校验。省略 `source_ids` 时会兼容
+使用单个 `source_id`。
 
 也可以直接传入 `ContextInput`：
 
@@ -47,9 +58,10 @@ openpangu_qa/
 from config.structure import ContextInput
 
 data = ContextInput(
-    context="人工智能在教育中的应用",
-    source_id="source_001",
-    url="https://example.com/source",
+    context="生成式人工智能的技术基础、应用与风险",
+    source_id="wiki_generative_ai",
+    url="https://zh.wikipedia.org/wiki/%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E6%85%A7",
+    source_ids=["wiki_generative_ai"],
 )
 ```
 
@@ -57,9 +69,10 @@ data = ContextInput(
 
 ```json
 {
-    "context": "人工智能在教育中的应用",
-    "source_id": "source_001",
-    "url": "https://example.com/source"
+    "context": "生成式人工智能的技术基础、应用与风险",
+    "source_id": "wiki_generative_ai",
+    "source_ids": ["wiki_generative_ai"],
+    "url": "https://zh.wikipedia.org/wiki/%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E6%85%A7"
 }
 ```
 
@@ -72,16 +85,26 @@ result = run_pipeline("data/input.json")
 print(result.final_report)
 ```
 
-JSON 文件的顶层必须是对象，并且必须包含 `context`、`source_id`、`url` 三个字符串字段。
+JSON 文件的顶层必须是对象，并且必须包含 `context`、`source_id`、`url` 三个字符串字段；`source_ids` 为可选字符串数组。
 
-当前实验采用单来源方案，因此每个 Wikipedia 页面单独保存为一个 JSON 文件。`normal_input.json` 选用“生成式人工智能”页面，其他页面保存在 `data/wikipedia_sources/` 中备用。
+当前实验保存 5 个完整的 Wikipedia revision 快照。`normal_input.json` 只保存研究主题、主来源和 5 个来源 ID；运行时会从来源目录加载全部正文。`retrieval_failure.json` 使用不存在的来源 ID，专门测试真实的来源解析失败。
+
+刷新数据时执行：
+
+```bash
+python scripts/collect_wikipedia.py
+```
+
+采集脚本按照 manifest 中固定的 `revision_id` 请求 Wikipedia API，不截断正文，
+并更新 `stored_characters`、`truncated` 和 `content_sha256`。运行前后的来源可以用
+测试命令检查一致性。
 
 ## 运行示例
 
 在 `openpangu_qa` 目录下执行：
 
 ```bash
-python -c "from main import run_pipeline; r = run_pipeline({'context': '人工智能在教育中的应用', 'source_id': 'source_001', 'url': 'https://example.com/source'}); print(r.final_report); print(r.coverage_rate)"
+python -c "from main import run_pipeline; r = run_pipeline({'context': '生成式人工智能的技术基础、应用与风险', 'source_id': 'wiki_generative_ai', 'source_ids': ['wiki_generative_ai'], 'url': 'https://zh.wikipedia.org/wiki/%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E6%85%A7'}); print(r.final_report); print(r.coverage_rate)"
 ```
 
 使用本次构建的真实 Wikipedia 数据：
@@ -96,10 +119,16 @@ python -c "from main import run_pipeline; r = run_pipeline('data/normal_input.js
 python -c "from main import run_pipeline; r = run_pipeline('data/retrieval_failure.json'); print(r.final_report); print('重试次数:', r.total_retries)"
 ```
 
+运行数据测试：
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 从项目父目录以包方式运行：
 
 ```bash
-python -c "from openpangu_qa.main import run_pipeline; r = run_pipeline({'context': '人工智能在教育中的应用', 'source_id': 'source_001', 'url': 'https://example.com/source'}); print(r.final_report)"
+python -c "from openpangu_qa.main import run_pipeline; r = run_pipeline({'context': '生成式人工智能的技术基础、应用与风险', 'source_id': 'wiki_generative_ai', 'source_ids': ['wiki_generative_ai'], 'url': 'https://zh.wikipedia.org/wiki/%E7%94%9F%E6%88%90%E5%BC%8F%E4%BA%BA%E5%B7%A5%E6%99%BA%E6%85%A7'}); print(r.final_report)"
 ```
 
 ## 工作流程
@@ -109,7 +138,7 @@ ContextInput
     ↓
 PlanAgent       拆分至少三个子任务
     ↓
-RetrieveAgent   为每个子任务保留来源证据
+RetrieveAgent   按 source_ids 加载并校验完整来源证据
     ↓
 WriteAgent      生成带来源引用的调研报告
     ↓
@@ -124,7 +153,7 @@ Agent 之间通过 `AgentState` 传递状态。证据保持原始骨架定义的
 [
     {
         "子任务": {
-            "source_001": "来源内容"
+            "wiki_generative_ai": "来源内容"
         }
     }
 ]
@@ -144,11 +173,15 @@ Agent 之间通过 `AgentState` 传递状态。证据保持原始骨架定义的
 
 单次 Agent 执行失败时，系统最多重试两次。检索阶段如果 `source_id` 为空，会被视为检索失败并进入重试流程。
 启用盘古模型后，规划结果必须由模型返回至少三个有效子任务；解析失败不会静默替换为固定子任务，
-而是记录原始返回并进入重试。撰写结果也必须逐个包含子任务小节及其对应来源引用，
-否则会进入撰写阶段重试。
+而是记录原始返回并进入重试。模型模式下，WriteAgent 会为每个子任务单独调用一次模型；
+模型只负责正文，系统负责组装小节标题、真实来源引用和来源列表，因此不会因为模型漏写
+`[source_id]` 而丢失引用。已经成功生成的小节会保存在 AgentState 中，重试时只重新生成
+失败的小节，并把上一次错误反馈注入提示词。适配器检测到输出达到 `max_new_tokens` 时
+会将其视为疑似截断并触发修复重试。
 
-撰写 Agent 的提示词会动态注入本次运行的真实子任务标题、来源编号和来源 URL，
-不会使用“原文任务1”或通用来源编号作为输出模板，避免模型照抄占位符。
+撰写 Agent 的提示词会动态注入当前真实子任务和来源正文片段，不会使用“原文任务1”或
+通用来源编号作为输出模板；完整来源仍保存在已校验快照中，提示词只使用受控长度片段
+以避免上下文过长。
 
 `baseline_comparison` 不是从多 Agent 报告推导出来的伪基线。主流程结束后，
 `Audit_agent.baseline` 会使用相同输入独立执行一次单 Agent 撰写，并单独统计步骤数、重试次数和引用覆盖率。
@@ -165,7 +198,7 @@ Linux 云端示例：
 ```bash
 export PANGU_MODEL_PATH=/opt/pangu/openPangu-Embedded-1B-V1.1
 export PANGU_DEVICE=auto
-export PANGU_MAX_NEW_TOKENS=512
+export PANGU_MAX_NEW_TOKENS=1024
 export PANGU_USE_FUSED_ATTN=0
 python -c "from main import run_pipeline; r = run_pipeline('data/input.json'); print(r.final_report); print(r.coverage_rate)"
 ```

@@ -12,9 +12,9 @@ def loader(data: Any) -> ContextInput:
     """检查并转换输入数据，统一返回一个 ``ContextInput`` 对象。
 
     输入可以是 ``ContextInput``、包含 ``context``、``source_id``、``url``
-    三个字段的字典，也可以是保存了这个字典的本地 JSON 文件路径。
-    项目骨架只定义了一条上下文和一个来源，对缺少字段或类型不正确的
-    输入直接报错。
+    和可选 ``source_ids`` 的字典，也可以是保存了这个字典的本地 JSON
+    文件路径。``context`` 是研究主题，不是来源正文；来源正文由检索
+    Agent 根据 source_ids 从本地快照加载。
     """
 
     if isinstance(data, ContextInput):
@@ -42,10 +42,29 @@ def loader(data: Any) -> ContextInput:
     if not values["context"].strip():
         raise ValueError("context 不能为空")
 
+    raw_source_ids = data.get("source_ids")
+    if raw_source_ids is None:
+        source_ids = [values["source_id"].strip()] if values["source_id"].strip() else []
+    elif not isinstance(raw_source_ids, list):
+        raise TypeError("字段 source_ids 必须是字符串数组")
+    else:
+        source_ids = []
+        for source_id in raw_source_ids:
+            if not isinstance(source_id, str) or not source_id.strip():
+                raise TypeError("字段 source_ids 只能包含非空字符串")
+            normalized = source_id.strip()
+            if normalized not in source_ids:
+                source_ids.append(normalized)
+
+    primary_source_id = values["source_id"].strip()
+    if primary_source_id and primary_source_id not in source_ids:
+        raise ValueError("source_id 必须包含在 source_ids 中")
+
     return ContextInput(
         context=values["context"],
         source_id=values["source_id"],
         url=values["url"],
+        source_ids=source_ids,
     )
 
 

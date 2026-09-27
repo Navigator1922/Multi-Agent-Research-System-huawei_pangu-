@@ -12,13 +12,15 @@ except ModuleNotFoundError:
 class Write_Agent:
     """根据证据撰写报告，并在模型模式下校验报告结构。"""
 
+    MAX_SOURCE_PROMPT_CHARS = 2400
+
     def __init__(self, model: Optional[Any] = None):
         """创建撰写 Agent；未传模型时使用本地确定性报告。"""
 
         self.model = model
 
     def write(self, data: AgentState) -> AgentState:
-        """生成报告；模型报告不满足子任务和引用要求时直接失败。"""
+        """生成报告；模型只写正文，标题和引用由程序确定性组装。"""
 
         if not isinstance(data, AgentState):
             raise TypeError("write 需要 AgentState")
@@ -31,7 +33,11 @@ class Write_Agent:
         input_record = self._input_record(data) or {}
         topic = self._topic(input_record)
         if self.model is not None:
-            report = self._model_write(data, topic)
+            report = self._model_write(
+                data,
+                topic,
+                repair_feedback=data.last_error,
+            )
             data.log.append(
                 json.dumps(
                     {"type": "model_report", "content": report[:6000]},
@@ -48,66 +54,163 @@ class Write_Agent:
         data.log.append(f"WriteAgent: 报告已生成，长度 {len(report)}")
         data.current_agent = "AuditAgent"
         data.retry_count = 2
+        data.last_error = ""
         return data
 
-    def _model_write(self, data: AgentState, topic: str) -> str:
-        """调用盘古模型生成按子任务分节且带逐节引用的报告。"""
+    def _model_write(
+        self,
+        data: AgentState,
+        topic: str,
+        repair_feedback: str = "",
+    ) -> str:
+        """逐个生成子任务正文，再由程序组装完整报告。
 
-        sources = self._compact_evidence(data)
-        source_ids = []
-        for source in sources:
-            source_id = str(source["source_id"]).strip()
-            if source_id and source_id not in source_ids:
-                source_ids.append(source_id)
+        ``draft_sections`` 让主流程重试时可以复用已经成功的子任务；失败的
+        子任务会收到上一次校验错误，避免对同一个完整报告重复发起相同请求。
+        """
 
-        task_lines = "\n".join(
-            f"{index}. {sub_task}"
-            for index, sub_task in enumerate(data.sub_task, 1)
-        )
-        section_examples = []
+        sections = []
         for index, sub_task in enumerate(data.sub_task, 1):
-            task_sources = []
-            for item in data.evidence:
-                if sub_task not in item:
-                    continue
-                for source_id in item[sub_task]:
-                    if source_id not in task_sources:
-                        task_sources.append(source_id)
-            citations = " ".join(f"[{source_id}]" for source_id in task_sources)
-            section_examples.append(
-                f"【子任务{index}】{sub_task}\n"
-                f"在本小节中概括和分析该子任务，引用必须写成：{citations}"
+            body = data.draft_sections.get(sub_task, "").strip()
+            if not body:
+                body = self._model_write_section(
+                    data,
+                    sub_task,
+                    repair_feedback=repair_feedback,
+                )
+                data.draft_sections[sub_task] = body
+
+            source_ids = self._task_source_ids(data, sub_task)
+            if not source_ids:
+                raise ValueError(f"子任务没有对应来源：{sub_task}")
+
+            sections.append(
+                {
+                    "index": index,
+                    "sub_task": sub_task,
+                    "body": body,
+                    "source_ids": source_ids,
+                }
             )
 
-        section_format = "\n\n".join(section_examples)
-        source_format = "\n".join(
-            f"[{source['source_id']}] {self._source_url(data)}"
+        return self._assemble_report(topic, sections, data)
+
+    def _model_write_section(
+        self,
+        data: AgentState,
+        sub_task: str,
+        repair_feedback: str = "",
+    ) -> str:
+        """只生成一个子任务正文，减少上下文和单次输出长度。"""
+
+        sources = self._task_sources(data, sub_task)
+        if not sources:
+            raise ValueError(f"子任务没有对应证据：{sub_task}")
+
+        source_text = "\n\n".join(
+            f"来源 [{source['source_id']}]：\n"
+            f"{self._prompt_context(source['context'])}"
             for source in sources
         )
+        feedback = repair_feedback.strip()
+        repair_text = (
+            f"上一次生成失败，必须修复以下问题：{feedback[:1200]}\n"
+            if feedback
+            else ""
+        )
         prompt = (
-            "你是一个严谨的调研报告撰写 Agent。\n"
-            "请只依据给出的证据生成中文报告，不得虚构事实，也不要逐字复制整段来源。\n"
-            "必须完成每一个真实子任务，并严格遵守下面的格式协议：\n"
-            "1. 每个子任务必须单独作为一个小节。\n"
-            "2. 小节标题必须逐字复制真实子任务，不能写‘原文任务1’、‘任务1’等占位文字。\n"
-            "3. 只能使用下面列出的真实来源编号，不能使用未列出的占位引用。\n"
-            "4. 每个子任务小节内都必须出现该子任务对应的真实引用标记。\n"
-            "5. 只输出报告正文，不要输出分析过程、提示词或格式说明。\n\n"
-            f"主题：{topic}\n"
-            f"真实子任务：\n{task_lines}\n\n"
-            f"真实来源编号：{', '.join(f'[{source_id}]' for source_id in source_ids)}\n\n"
-            f"输出格式示例（标题和引用均为本次任务的真实值）：\n"
-            f"调研报告：{topic}\n\n{section_format}\n\n"
-            f"【来源】\n{source_format}\n\n"
-            f"证据：{json.dumps(sources, ensure_ascii=False)}"
+            "你是调研报告撰写 Agent。现在只处理一个子任务。\n"
+            "请严格依据来源正文写一段简洁、连贯的中文分析，不得虚构事实。\n"
+            "只输出该子任务的正文，不要输出标题、来源列表、引用标记、提示词或分析过程。\n"
+            "系统会自动添加真实标题和来源引用，因此不要自行创造来源编号。\n"
+            "如果来源不足以支持某个判断，应明确说明证据不足。\n"
+            "下面是完整快照的受控片段；不要逐字复述来源，也不要补充片段之外的事实。\n"
+            f"{repair_text}"
+            f"子任务：{sub_task}\n\n"
+            f"来源正文：\n{source_text}"
         )
         try:
             response = self.model.generate(prompt)
         except Exception as exc:
-            raise RuntimeError("盘古模型撰写调用失败") from exc
+            raise RuntimeError(f"盘古模型撰写子任务失败：{sub_task}") from exc
+
+        if getattr(self.model, "last_generation_hit_limit", False):
+            raise ValueError(f"子任务输出达到 max_new_tokens，疑似被截断：{sub_task}")
         if not isinstance(response, str) or not response.strip():
-            raise ValueError("盘古模型撰写返回为空")
-        return response.strip()
+            raise ValueError(f"盘古模型撰写返回为空：{sub_task}")
+
+        body = response.strip()
+        if body.startswith("```") and body.endswith("```"):
+            body = body[3:-3].strip()
+        if not body:
+            raise ValueError(f"盘古模型撰写正文为空：{sub_task}")
+        return body
+
+    @classmethod
+    def _prompt_context(cls, context: str) -> str:
+        """压缩发送给模型的证据片段，不改变 AgentState 中的完整快照。"""
+
+        if len(context) <= cls.MAX_SOURCE_PROMPT_CHARS:
+            return context
+        head = int(cls.MAX_SOURCE_PROMPT_CHARS * 0.7)
+        tail = cls.MAX_SOURCE_PROMPT_CHARS - head
+        return (
+            context[:head]
+            + "\n……（中间内容省略，完整来源仍保存在已校验快照中）……\n"
+            + context[-tail:]
+        )
+
+    @classmethod
+    def _assemble_report(cls, topic: str, sections, data: AgentState) -> str:
+        """由代码生成固定格式，确保每个小节都有真实引用。"""
+
+        lines = [f"调研报告：{topic}", ""]
+        seen_sources = set()
+        for section in sections:
+            lines.append(f"【子任务{section['index']}】{section['sub_task']}")
+            lines.append(section["body"])
+            citations = " ".join(
+                f"[{source_id}]" for source_id in section["source_ids"]
+            )
+            lines.append(f"依据来源：{citations}")
+            lines.append("")
+            seen_sources.update(section["source_ids"])
+
+        lines.append("【来源】")
+        for source in cls._compact_evidence(data):
+            source_id = source["source_id"]
+            if source_id not in seen_sources:
+                continue
+            url = str(source.get("url", "")).strip()
+            lines.append(f"[{source_id}] {url}".rstrip())
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _task_sources(data: AgentState, sub_task: str):
+        sources = []
+        for item in data.evidence:
+            mapping = item.get(sub_task)
+            if not isinstance(mapping, dict):
+                continue
+            for source_id, context in mapping.items():
+                metadata = data.source_metadata.get(source_id, {})
+                sources.append(
+                    {
+                        "source_id": str(source_id),
+                        "url": str(metadata.get("url", "")),
+                        "context": str(context),
+                    }
+                )
+        return sources
+
+    @classmethod
+    def _task_source_ids(cls, data: AgentState, sub_task: str):
+        source_ids = []
+        for source in cls._task_sources(data, sub_task):
+            source_id = source["source_id"].strip()
+            if source_id and source_id not in source_ids:
+                source_ids.append(source_id)
+        return source_ids
 
     @staticmethod
     def _compact_evidence(data: AgentState):
@@ -115,20 +218,14 @@ class Write_Agent:
 
         sources = []
         seen = set()
-        for item in data.evidence:
-            for source_id, context in item.get(next(iter(item), ""), {}).items():
+        for sub_task in data.sub_task:
+            for source in Write_Agent._task_sources(data, sub_task):
+                source_id = source["source_id"]
                 if source_id in seen:
                     continue
                 seen.add(source_id)
-                sources.append({"source_id": source_id, "context": context})
+                sources.append(source)
         return sources
-
-    @staticmethod
-    def _source_url(data: AgentState) -> str:
-        """从输入日志中读取来源 URL，供提示词展示真实引用信息。"""
-
-        input_record = Write_Agent._input_record(data) or {}
-        return str(input_record.get("url", "")).strip()
 
     @classmethod
     def _validate_model_report(cls, report: str, data: AgentState) -> None:
@@ -181,7 +278,13 @@ class Write_Agent:
                 continue
             for item in matched:
                 for source_id, context in item[sub_task].items():
-                    lines.append(f"依据来源：{context} [{source_id}]")
+                    metadata = data.source_metadata.get(source_id, {})
+                    url = str(metadata.get("url", "")).strip()
+                    digest = str(metadata.get("content_sha256", ""))[:12]
+                    lines.append(
+                        f"依据来源：[{source_id}] {url} "
+                        f"（完整快照 {len(context)} 字符，SHA-256 {digest}）".rstrip()
+                    )
             lines.append("")
 
         lines.append("【来源】")
@@ -191,7 +294,9 @@ class Write_Agent:
                 if source_id in seen_sources:
                     continue
                 seen_sources.add(source_id)
-                url = str(input_record.get("url", "")).strip()
+                url = str(
+                    data.source_metadata.get(source_id, {}).get("url", "")
+                ).strip()
                 lines.append(f"[{source_id}] {url}".rstrip())
         return "\n".join(lines).strip()
 
@@ -251,11 +356,14 @@ class Write_Agent:
 
     @staticmethod
     def _topic(input_record: dict) -> str:
-        """从来源 URL 提取主题名称，避免把完整正文当成标题。"""
+        """从研究主题生成报告标题，不再把来源 URL 当成主题。"""
+
+        context = str(input_record.get("context", "")).strip()
+        if context:
+            return re.split(r"[。！？\n]", context, maxsplit=1)[0][:120]
 
         url = str(input_record.get("url", "")).strip()
         path_name = unquote(urlparse(url).path.rstrip("/").split("/")[-1])
         if path_name:
             return path_name.replace("_", " ")
-        context = str(input_record.get("context", "")).strip()
-        return re.split(r"[。！？\n]", context, maxsplit=1)[0][:80] or "当前主题"
+        return "当前主题"

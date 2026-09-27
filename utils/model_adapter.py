@@ -17,7 +17,7 @@ class PanguModel:
         self,
         model_path: str,
         device: str = "auto",
-        max_new_tokens: int = 512,
+        max_new_tokens: int = 1024,
     ) -> None:
         if not Path(model_path).is_dir():
             raise FileNotFoundError(f"盘古模型目录不存在：{model_path}")
@@ -35,6 +35,7 @@ class PanguModel:
         self.max_new_tokens = int(max_new_tokens)
         if self.max_new_tokens <= 0:
             raise ValueError("max_new_tokens 必须大于 0")
+        self.last_generation_hit_limit = False
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
@@ -158,6 +159,9 @@ class PanguModel:
 
         prompt_length = inputs["input_ids"].shape[-1]
         generated_tokens = output[0][prompt_length:]
+        self.last_generation_hit_limit = (
+            int(generated_tokens.shape[-1]) >= self.max_new_tokens
+        )
         return self.tokenizer.decode(
             generated_tokens,
             skip_special_tokens=True,
@@ -181,7 +185,7 @@ def load_model_from_environment() -> Optional[PanguModel]:
         return None
 
     device = os.getenv("PANGU_DEVICE", "auto").strip() or "auto"
-    token_limit = os.getenv("PANGU_MAX_NEW_TOKENS", "512").strip()
+    token_limit = os.getenv("PANGU_MAX_NEW_TOKENS", "1024").strip()
     try:
         max_new_tokens = int(token_limit)
     except ValueError as exc:
