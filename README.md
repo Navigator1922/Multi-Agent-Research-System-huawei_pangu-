@@ -163,6 +163,7 @@ Linux 云端示例：
 export PANGU_MODEL_PATH=/opt/pangu/openPangu-Embedded-1B-V1.1
 export PANGU_DEVICE=auto
 export PANGU_MAX_NEW_TOKENS=512
+export PANGU_USE_FUSED_ATTN=0
 python -c "from main import run_pipeline; r = run_pipeline('data/input.json'); print(r.final_report); print(r.coverage_rate)"
 ```
 
@@ -172,4 +173,6 @@ python -c "from main import run_pipeline; r = run_pipeline('data/input.json'); p
 export PANGU_MODEL_PATH=/opt/pangu/openPangu-Embedded-7B-V1.1
 ```
 
-适配器使用 `AutoTokenizer.from_pretrained` 和 `AutoModelForCausalLM.from_pretrained` 加载本地模型目录，并自动优先选择可用的 Ascend NPU、CUDA 或 CPU。模型目录必须已经存在于云端，代码仓库只保存适配逻辑，不保存模型权重。
+适配器使用 `AutoTokenizer.from_pretrained` 和 `AutoModelForCausalLM.from_pretrained` 加载本地模型目录，并自动优先选择可用的 Ascend NPU、CUDA 或 CPU。当前课程环境中的 openPangu 自定义代码会默认启用 NPU 融合 attention，但该算子实际推理时报 `aclnnFusedInferAttentionOnScoreV3` 错误，因此适配器默认关闭融合 attention，改用模型自带的 `eager` 实现。只有在确认 CANN、`torch-npu` 与模型版本兼容后，才设置 `PANGU_USE_FUSED_ATTN=1`。
+
+模型目录必须已经存在于云端，代码仓库只保存适配逻辑，不保存模型权重。模型加载成功不代表推理成功；运行时应检查是否出现 `模型推理失败`，以及最终是否生成了非空子任务和报告。

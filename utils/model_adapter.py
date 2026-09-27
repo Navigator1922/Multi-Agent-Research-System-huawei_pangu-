@@ -5,6 +5,7 @@
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -48,8 +49,55 @@ class PanguModel:
             model_path,
             trust_remote_code=True,
         )
+        self._configure_attention_backend()
         self.model.to(self.device)
         self.model.eval()
+
+    def _configure_attention_backend(self) -> None:
+        """关闭当前云端不兼容的融合 attention，改用模型自带的 eager 实现。
+
+        openPangu 的自定义模型代码会在导入时根据 Ascend 设备自动把
+        ``NPU_ATTN_INFR`` 设为 ``True``。当前云端的融合算子在实际生成时
+        会报 ``aclnnFusedInferAttentionOnScoreV3`` 错误，而且把模型移动到
+        CPU 后仍会错误调用 NPU 算子。模型源码同时提供了
+        ``eager_attention_forward`` 分支，因此在适配层关闭这个全局开关，
+        不需要修改 Hugging Face 缓存中的模型文件。
+
+        如需在已验证兼容的 CANN 环境中恢复融合算子，可设置
+        ``PANGU_USE_FUSED_ATTN=1``；默认关闭是为了保证当前课程环境能够
+        完成推理。
+        """
+
+        use_fused = os.getenv("PANGU_USE_FUSED_ATTN", "0").strip().lower()
+        use_fused = use_fused in {"1", "true", "yes", "on"}
+
+        # CPU 没有 torch_npu 融合算子，任何情况下都必须使用普通实现。
+        if self.device != "npu" or not use_fused:
+            patched = False
+            for module_name, module in list(sys.modules.items()):
+                if module_name.endswith("modeling_openpangu_dense"):
+                    if hasattr(module, "NPU_ATTN_INFR"):
+                        module.NPU_ATTN_INFR = False
+                        patched = True
+
+            # 自定义模型的 attention 层读取同一个 config 对象；显式指定
+            # eager，避免关闭融合算子后又被 Transformers 选择到其他后端。
+            configs = [getattr(self.model, "config", None)]
+            decoder = getattr(self.model, "model", None)
+            configs.append(getattr(decoder, "config", None))
+            for config in configs:
+                if config is None:
+                    continue
+                if hasattr(config, "_attn_implementation"):
+                    config._attn_implementation = "eager"
+                if hasattr(config, "_attn_implementation_internal"):
+                    config._attn_implementation_internal = "eager"
+
+            if self.device == "npu" and not patched:
+                raise RuntimeError(
+                    "未找到 openPangu 的 modeling_openpangu_dense 模块，"
+                    "无法关闭 NPU 融合 attention"
+                )
 
     @staticmethod
     def _choose_device(torch: Any, requested: str) -> str:
@@ -93,13 +141,20 @@ class PanguModel:
             for key, value in inputs.items()
         }
 
-        with self._torch.no_grad():
-            output = self.model.generate(
-                **inputs,
-                max_new_tokens=self.max_new_tokens,
-                do_sample=False,
-                pad_token_id=getattr(self.tokenizer, "pad_token_id", None),
-            )
+        try:
+            with self._torch.no_grad():
+                output = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=getattr(self.tokenizer, "pad_token_id", None),
+                )
+        except Exception as exc:
+            raise RuntimeError(
+                f"盘古模型推理失败，device={self.device}，"
+                f"attention={'fused' if self._fused_attention_enabled else 'eager'}，"
+                f"原始异常={type(exc).__name__}: {exc}"
+            ) from exc
 
         prompt_length = inputs["input_ids"].shape[-1]
         generated_tokens = output[0][prompt_length:]
@@ -107,6 +162,15 @@ class PanguModel:
             generated_tokens,
             skip_special_tokens=True,
         ).strip()
+
+    @property
+    def _fused_attention_enabled(self) -> bool:
+        """返回当前模型模块是否仍启用了 NPU 融合 attention。"""
+
+        for module_name, module in sys.modules.items():
+            if module_name.endswith("modeling_openpangu_dense"):
+                return bool(getattr(module, "NPU_ATTN_INFR", False))
+        return False
 
 
 def load_model_from_environment() -> Optional[PanguModel]:
