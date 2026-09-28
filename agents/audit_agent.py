@@ -1,7 +1,10 @@
+import json
+import re
+
 try:
-    from config.structure import AgentState
+    from config.structure import AgentState,DataBlock
 except ModuleNotFoundError:
-    from ..config.structure import AgentState
+    from ..config.structure import AgentState,DataBlock
 
 
 class Audit_agent:
@@ -21,14 +24,6 @@ class Audit_agent:
         )
 
     def kpi(self, data: AgentState) -> AgentState:
-        import json
-        import re
-
-        try:
-            from config.structure import DataBlock
-        except ModuleNotFoundError:
-            from ..config.structure import DataBlock
-
         if not isinstance(data, AgentState):
             raise TypeError("kpi 需要 AgentState")
         if not isinstance(data.evidence, list):
@@ -145,8 +140,7 @@ class Audit_agent:
         )
         data.current_agent = "AuditAgent"
         if issues:
-            # Keep the state running so main.py can apply its retry policy; the
-            # exception makes the failed audit visible to that policy.
+            # 保持状态为运行中，以便 main.py 应用重试策略；抛出异常可让该策略感知审核失败。
             raise RuntimeError("审核未通过：" + "；".join(issues))
 
         data.status = "Completed"

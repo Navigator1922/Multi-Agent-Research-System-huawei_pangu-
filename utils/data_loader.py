@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from typing import Any
 
 try:
@@ -7,10 +9,7 @@ except ModuleNotFoundError:
 
 
 def loader(data: Any):
-    """Validate an input record and convert it to the locked input contract."""
-
-    import json
-    from pathlib import Path
+    """校验输入记录，并将其转换为固定的输入数据契约。"""
 
     if isinstance(data, ContextInput):
         payload = {
@@ -38,8 +37,7 @@ def loader(data: Any):
     if not isinstance(payload, dict):
         raise ValueError("输入数据顶层必须是对象")
 
-    # ``context`` is accepted only as a compatibility alias for older input
-    # files; the returned object always uses the current ``topic`` field.
+    # 仅将 ``context`` 作为旧版输入文件的兼容别名；返回对象始终使用当前的 ``topic`` 字段。
     topic = payload.get("topic", payload.get("context"))
     collection_id = payload.get(
         "db_collection_id", payload.get("collection_id")

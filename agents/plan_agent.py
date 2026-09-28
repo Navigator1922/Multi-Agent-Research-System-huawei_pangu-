@@ -32,8 +32,7 @@ class Plan_Agent:
 
         task.overall_steps += 1
         if self.model is None:
-            # The no-model mode is deterministic, but it still passes through
-            # the same strict shape as a model response.
+            # 无模型模式虽然是确定性的，但仍然使用与模型响应相同的严格数据结构。
             payload = {
                 "sub_task": [
                     f"{topic}的背景、基本概念与关键组成",

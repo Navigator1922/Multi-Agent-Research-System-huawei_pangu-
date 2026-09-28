@@ -1,7 +1,9 @@
+import json
+
 try:
-    from config.structure import AgentState
+    from config.structure import AgentState,DataBlock
 except ModuleNotFoundError:
-    from ..config.structure import AgentState
+    from ..config.structure import AgentState,DataBlock
 
 
 class Write_Agent:
@@ -10,13 +12,6 @@ class Write_Agent:
         self.model = model
 
     def frame(self, data: AgentState):
-        import json
-
-        try:
-            from config.structure import DataBlock
-        except ModuleNotFoundError:
-            from ..config.structure import DataBlock
-
         if not isinstance(data, AgentState):
             raise TypeError("frame 需要 AgentState")
         if data.status != "Running":

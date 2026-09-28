@@ -1,25 +1,18 @@
+import hashlib
+import json
+import re
+from pathlib import Path
+
 try:
-    from config.structure import AgentState
+    from config.structure import AgentState,DataBlock
 except ModuleNotFoundError:
-    from ..config.structure import AgentState
+    from ..config.structure import AgentState,DataBlock
 
 class Retrieve_Agent:
     def __init__(self, data_dir):
-        from pathlib import Path
-
         self.data_dir = Path(data_dir)
 
     def retrieve(self,data:AgentState)->AgentState:
-        import hashlib
-        import json
-        import re
-        from pathlib import Path
-
-        try:
-            from config.structure import DataBlock
-        except ModuleNotFoundError:
-            from ..config.structure import DataBlock
-
         if not isinstance(data, AgentState):
             raise TypeError("retrieve 需要 AgentState")
         if data.status != "Running":
@@ -35,8 +28,7 @@ class Retrieve_Agent:
         if not root.is_dir():
             raise NotADirectoryError(f"本地检索路径不是目录：{root}")
 
-        # Accept a small, dependency-free collection format.  A collection may
-        # be a JSON/JSONL file containing documents, records, chunks or sources.
+        # 接受不依赖第三方库的简易集合格式；集合可以是包含文档、记录、分块或来源的 JSON/JSONL 文件。
         paths = sorted(
             path
             for path in root.rglob("*")
@@ -154,8 +146,7 @@ class Retrieve_Agent:
                 blocks.append(("table", as_text(table, "table")))
 
             if not blocks:
-                # A manifest/index entry can be present beside real documents;
-                # it is metadata about a source, not evidence itself.
+                # 清单或索引条目可能与真实文档并列存在；它只是来源元数据，不是证据本身。
                 if any(
                     key in record
                     for key in ("file", "revision_id", "stored_characters", "truncated")
@@ -246,9 +237,8 @@ class Retrieve_Agent:
 
         data.evidence = evidence
         data.overall_steps += 1
-        # web_search is the second half of the retrieval stage.  Keep the
-        # route here until both local and network retrieval have succeeded so
-        # a network error re-enters the complete retrieval retry path.
+        # web_search 是检索阶段的后半部分；只有本地检索和网络检索都成功后才切换路由，
+        # 这样网络错误才能重新进入完整的检索重试流程。
         data.current_agent = "RetrieveAgent"
         data.log.append(
             json.dumps(
