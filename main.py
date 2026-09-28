@@ -26,7 +26,7 @@ def run_pipeline(data, data_dir="./data") -> SystemOutput:
     planner = Plan_Agent(model=model)
     retriever = Retrieve_Agent(data_dir=data_dir)
     writer = Write_Agent(model=model)
-    auditor = Audit_agent()  # 审核Agent不再需要大模型，依靠规则计算KPI和AI率
+    auditor = Audit_agent(model=model)
 
     # 3. 规划阶段 (Plan)
     # 先进行大纲规划，再切分具体子任务

@@ -21,6 +21,9 @@ class AgentState:
     current_agent: str = "PlanAgent"
     overall_steps: int = 0
     total_retries: int = 0
+
+    topic: str = ""
+    outline: List[Dict[str, str]] = field(default_factory=list)
     
     db_collection_id: str = "" 
     
